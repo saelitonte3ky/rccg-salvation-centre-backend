@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: rccg-backend
+    env: go
+    goVersion: 1.25.5
+    buildCommand: go build -o app .
+    startCommand: ./app
+    autoDeploy: true
+    plan: free
