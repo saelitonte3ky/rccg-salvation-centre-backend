@@ -1,0 +1,41 @@
+# Go build files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace files
+bin/
+obj/
+
+# Dependencies
+vendor/
+
+# Logs
+*.log
+
+# IDE files
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# MacOS
+.DS_Store
+
+# Node (if mixed project)
+node_modules/
+
+# Build folders
+dist/
+build/
