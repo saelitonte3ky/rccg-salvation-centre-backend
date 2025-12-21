@@ -28,14 +28,16 @@ Desktop.ini
 # Environment files
 .env
 .env.local
+.env.prod
 .env.*.local
 
 # MacOS
 .DS_Store
 
-# Node (if mixed project)
-node_modules/
 
 # Build folders
 dist/
 build/
+
+
+firebase-adminsdk.json
