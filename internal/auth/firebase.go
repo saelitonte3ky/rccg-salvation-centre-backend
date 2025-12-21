@@ -1,10 +1,10 @@
+// internal/auth/firebase.go
 package auth
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -18,75 +18,33 @@ import (
 
 var FirebaseAuth *auth.Client
 
-func InitFirebase() error {
-	ctx := context.Background()
-	var opt option.ClientOption
-
-	firebaseCredsJSON := os.Getenv("FIREBASE_CREDENTIALS_JSON")
-
-	if firebaseCredsJSON != "" {
-		var js json.RawMessage
-		if err := json.Unmarshal([]byte(firebaseCredsJSON), &js); err != nil {
-			return fmt.Errorf("invalid FIREBASE_CREDENTIALS_JSON format: %v", err)
-		}
-
-		opt = option.WithCredentialsJSON([]byte(firebaseCredsJSON))
-		log.Println("Using Firebase credentials from FIREBASE_CREDENTIALS_JSON environment variable")
-	} else if credsPath := os.Getenv("FIREBASE_CREDENTIALS_PATH"); credsPath != "" {
-		if _, err := os.Stat(credsPath); err == nil {
-			opt = option.WithCredentialsFile(credsPath)
-			log.Printf("Using Firebase credentials from path: %s", credsPath)
-		} else {
-			return fmt.Errorf("FIREBASE_CREDENTIALS_PATH set but file not found: %s", credsPath)
-		}
-	} else if _, err := os.Stat("firebase-adminsdk.json"); err == nil {
-		opt = option.WithCredentialsFile("firebase-adminsdk.json")
-		log.Println("Using Firebase credentials from firebase-adminsdk.json file")
-	} else {
-		return fmt.Errorf("no Firebase credentials found. Set FIREBASE_CREDENTIALS_JSON env var, FIREBASE_CREDENTIALS_PATH, or provide firebase-adminsdk.json file")
+func InitFirebase() {
+	opt := option.WithCredentialsFile("firebase-adminsdk.json")
+	app, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		log.Fatal("Error initializing Firebase app:", err)
 	}
 
-	app, err := firebase.NewApp(ctx, nil, opt)
+	FirebaseAuth, err = app.Auth(context.Background())
 	if err != nil {
-		return fmt.Errorf("failed to initialize Firebase app: %v", err)
-	}
-
-	FirebaseAuth, err = app.Auth(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get Firebase Auth client: %v", err)
+		log.Fatal("Error initializing Firebase Auth:", err)
 	}
 
 	log.Println("Firebase Auth initialized successfully")
-	return nil
 }
 
+// Generate session cookie (valid 14 days)
 func CreateSessionCookie(idToken string) (string, error) {
-	if FirebaseAuth == nil {
-		return "", fmt.Errorf("Firebase Auth not initialized")
-	}
-
-	expiresIn := time.Hour * 24 * 14
-	sessionCookie, err := FirebaseAuth.SessionCookie(context.Background(), idToken, expiresIn)
-	if err != nil {
-		return "", fmt.Errorf("failed to create session cookie: %v", err)
-	}
-
-	return sessionCookie, nil
+	expiresIn := time.Hour * 24 * 14 // 14 days max
+	return FirebaseAuth.SessionCookie(context.Background(), idToken, expiresIn)
 }
 
+// Verify session cookie and get admin role
 func VerifySessionCookie(cookie string) (*auth.Token, error) {
-	if FirebaseAuth == nil {
-		return nil, fmt.Errorf("Firebase Auth not initialized")
-	}
-
-	token, err := FirebaseAuth.VerifySessionCookieAndCheckRevoked(context.Background(), cookie)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify session cookie: %v", err)
-	}
-
-	return token, nil
+	return FirebaseAuth.VerifySessionCookieAndCheckRevoked(context.Background(), cookie)
 }
 
+// Generate fingerprint for extra security
 func GenerateFingerprint(c *gin.Context) string {
 	userAgent := c.Request.UserAgent()
 	ip := c.ClientIP()
