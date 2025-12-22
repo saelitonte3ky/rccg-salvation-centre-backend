@@ -2,17 +2,18 @@ services:
   - type: web
     name: rccg-backend
     env: go
-    buildCommand: go build -tags netgo -ldflags '-s -w' -o app ./cmd/server
+    buildCommand: GOOS=linux GOARCH=amd64 go build -tags netgo -ldflags '-s -w' -o app ./cmd/server
     startCommand: ./app
     envVars:
       - key: ENVIRONMENT
         value: production
+      - key: PORT
+        value: "10000"
       - key: JWT_SECRET
-        generateValue: true  
+        generateValue: true
       - key: GIN_MODE
         value: release
       - key: FIREBASE_PROJECT_ID
         value: rccg-salvation-centre
       - key: SESSION_COOKIE_NAME
         value: rccg_session
-    
