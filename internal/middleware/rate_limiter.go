@@ -96,18 +96,27 @@ func SimpleRateLimiter(rate int, window time.Duration) gin.HandlerFunc {
 	}
 }
 
+// RateLimiter - General rate limiter for all routes
 func RateLimiter() gin.HandlerFunc {
 	return SimpleRateLimiter(100, time.Minute)
 }
 
+// AuthRateLimiter - More permissive for development
 func AuthRateLimiter() gin.HandlerFunc {
-	return SimpleRateLimiter(10, 15*time.Minute)
+	return SimpleRateLimiter(50, 5*time.Minute)
 }
 
+// LoginRateLimiter
+func LoginRateLimiter() gin.HandlerFunc {
+	return SimpleRateLimiter(10, time.Minute)
+}
+
+// StrictRateLimiter - For sensitive operations
 func StrictRateLimiter() gin.HandlerFunc {
-	return SimpleRateLimiter(5, time.Hour)
+	return SimpleRateLimiter(20, time.Hour)
 }
 
+// CustomRateLimiter
 func CustomRateLimiter(rate int, window time.Duration) gin.HandlerFunc {
 	return SimpleRateLimiter(rate, window)
 }
