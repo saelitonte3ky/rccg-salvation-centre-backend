@@ -5,8 +5,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"rccg-salvation-centre-backend/internal/auth"
@@ -21,6 +19,7 @@ type LoginRequest struct {
 }
 
 // POST /api/auth/login
+// Receives Firebase ID token from frontend and creates secure session cookie
 func Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -28,27 +27,25 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Create session cookie from Firebase ID token
+	// Create secure session cookie from Firebase ID token (valid 14 days)
 	sessionCookie, err := auth.CreateSessionCookie(req.IDToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired Firebase token"})
 		return
 	}
 
-	// Set HttpOnly session cookie - improved settings
+	// Set HTTP-only secure cookie
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     "rccg_session",
+		Name:     os.Getenv("SESSION_COOKIE_NAME"),
 		Value:    sessionCookie,
 		Expires:  time.Now().Add(14 * 24 * time.Hour),
-		MaxAge:   14 * 24 * 3600, // 14 days
 		Path:     "/",
-		Domain:   "", // Leave empty unless using subdomains
 		HttpOnly: true,
 		Secure:   os.Getenv("ENVIRONMENT") == "production",
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Verify the original Firebase ID token to get claims
+	// Verify the ID token to extract email
 	token, err := auth.FirebaseAuth.VerifyIDToken(context.Background(), req.IDToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to verify Firebase token"})
@@ -61,19 +58,17 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Find admin in database
+	// Check if this email exists in our admins table
 	var admin models.Admin
 	if err := database.DB.Where("email = ?", email).First(&admin).Error; err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Admin account not found. Contact superadmin."})
 		return
 	}
 
-	// Return user data
+	// Success — return user info
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"user": gin.H{
-			"id":    strconv.FormatUint(uint64(admin.ID), 10),
-			"name":  strings.Split(admin.Email, "@")[0], // Replace with real name field later
 			"email": admin.Email,
 			"role":  admin.Role,
 		},
@@ -81,31 +76,29 @@ func Login(c *gin.Context) {
 }
 
 // GET /api/auth/me
+// Returns current logged-in admin (protected by AuthRequired middleware)
 func Me(c *gin.Context) {
 	email := c.GetString("adminEmail")
 	role := c.GetString("adminRole")
-	adminID := c.GetUint("adminID")
 
-	if email == "" || role == "" || adminID == 0 {
+	if email == "" || role == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":    strconv.FormatUint(uint64(adminID), 10),
-		"name":  strings.Split(email, "@")[0],
 		"email": email,
 		"role":  role,
 	})
 }
 
 // POST /api/auth/logout
+// Clears the session cookie
 func Logout(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     "rccg_session",
+		Name:     os.Getenv("SESSION_COOKIE_NAME"),
 		Value:    "",
 		Expires:  time.Unix(0, 0),
-		MaxAge:   -1,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   os.Getenv("ENVIRONMENT") == "production",
