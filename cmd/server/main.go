@@ -13,7 +13,8 @@ import (
 
 	"rccg-salvation-centre-backend/internal/auth"
 	"rccg-salvation-centre-backend/internal/database"
-	"rccg-salvation-centre-backend/internal/middleware"
+
+	//"rccg-salvation-centre-backend/internal/middleware"
 	"rccg-salvation-centre-backend/internal/routes"
 	"rccg-salvation-centre-backend/seed"
 
@@ -55,9 +56,9 @@ func main() {
 
 	r := gin.Default()
 	//r.Use(middleware.SecurityHeaders())
-	r.Use(middleware.CORSMiddleware())
+	//r.Use(middleware.CORSMiddleware())
 	//r.Use(middleware.RequestSizeLimiter(10 << 20))
-	r.Use(middleware.RateLimiter())
+	//r.Use(middleware.RateLimiter())
 	routes.SetupRoutes(r)
 
 	port := os.Getenv("PORT")
