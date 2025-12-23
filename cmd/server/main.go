@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"rccg-salvation-centre-backend/internal/auth"
 	"rccg-salvation-centre-backend/internal/database"
-
 	"rccg-salvation-centre-backend/internal/middleware"
 	"rccg-salvation-centre-backend/internal/routes"
 	"rccg-salvation-centre-backend/seed"
@@ -47,9 +47,15 @@ func main() {
 		}
 	}()
 
-	if env != "production" {
+	// Check if seeding is enabled
+	enableSeeding := strings.ToLower(os.Getenv("ENABLE_SEEDING"))
+	if enableSeeding == "true" || enableSeeding == "1" || enableSeeding == "yes" {
+		log.Println("Starting database seeding...")
 		seed.SeedAdmins()
 		seed.SeedServiceTypes()
+		log.Println("Database seeding completed")
+	} else {
+		log.Println("Seeding skipped (ENABLE_SEEDING not set to true)")
 	}
 
 	auth.InitFirebase()
@@ -58,7 +64,8 @@ func main() {
 	//r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORSMiddleware())
 	//r.Use(middleware.RequestSizeLimiter(10 << 20))
-	//r.Use(middleware.RateLimiter())
+	r.Use(middleware.RateLimiter())
+
 	routes.SetupRoutes(r)
 
 	port := os.Getenv("PORT")
