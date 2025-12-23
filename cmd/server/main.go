@@ -56,7 +56,7 @@ func main() {
 	r := gin.Default()
 	//r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORSMiddleware())
-	r.Use(middleware.RequestSizeLimiter(10 << 20))
+	//r.Use(middleware.RequestSizeLimiter(10 << 20))
 	r.Use(middleware.RateLimiter())
 	routes.SetupRoutes(r)
 
