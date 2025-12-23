@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"time"
 
 	"rccg-salvation-centre-backend/internal/auth"
 	"rccg-salvation-centre-backend/internal/database"
@@ -34,16 +33,26 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Set HTTP-only secure cookie
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     os.Getenv("SESSION_COOKIE_NAME"),
-		Value:    sessionCookie,
-		Expires:  time.Now().Add(14 * 24 * time.Hour),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   os.Getenv("ENVIRONMENT") == "production",
-		SameSite: http.SameSiteLaxMode,
-	})
+	// Get configuration from environment
+	cookieName := os.Getenv("SESSION_COOKIE_NAME")
+	if cookieName == "" {
+		cookieName = "rccg_session" // fallback default
+	}
+
+	domain := os.Getenv("COOKIE_DOMAIN") // e.g., "localhost" or empty string
+
+	secure := os.Getenv("ENVIRONMENT") == "production"
+
+	// Use Gin's built-in SetCookie (this is the correct way in Gin)
+	c.SetCookie(
+		cookieName,    // name
+		sessionCookie, // value
+		14*24*60*60,   // maxAge: 14 days in seconds
+		"/",           // path
+		domain,        // domain (empty = current host only)
+		secure,        // secure (true only in production)
+		true,          // httpOnly
+	)
 
 	// Verify the ID token to extract email
 	token, err := auth.FirebaseAuth.VerifyIDToken(context.Background(), req.IDToken)
@@ -95,15 +104,24 @@ func Me(c *gin.Context) {
 // POST /api/auth/logout
 // Clears the session cookie
 func Logout(c *gin.Context) {
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     os.Getenv("SESSION_COOKIE_NAME"),
-		Value:    "",
-		Expires:  time.Unix(0, 0),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   os.Getenv("ENVIRONMENT") == "production",
-		SameSite: http.SameSiteLaxMode,
-	})
+	cookieName := os.Getenv("SESSION_COOKIE_NAME")
+	if cookieName == "" {
+		cookieName = "rccg_session"
+	}
+
+	domain := os.Getenv("COOKIE_DOMAIN")
+	secure := os.Getenv("ENVIRONMENT") == "production"
+
+	// Properly clear the cookie using Gin's SetCookie with maxAge = -1
+	c.SetCookie(
+		cookieName,
+		"",
+		-1, // delete cookie
+		"/",
+		domain,
+		secure,
+		true,
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
