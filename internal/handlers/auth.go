@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 
 	"rccg-salvation-centre-backend/internal/auth"
 	"rccg-salvation-centre-backend/internal/database"
@@ -39,18 +40,29 @@ func Login(c *gin.Context) {
 		cookieName = "rccg_session" // fallback default
 	}
 
-	domain := os.Getenv("COOKIE_DOMAIN") // e.g., "localhost" or empty string
+	// Detect if request is from local development (for testing local frontend against prod backend)
+	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
+		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
+		strings.Contains(c.Request.Host, "localhost")
 
+	var domain string
 	secure := os.Getenv("ENVIRONMENT") == "production"
 
-	// Use Gin's built-in SetCookie (this is the correct way in Gin)
+	if isDev {
+		domain = ""    // no domain for local cross-port
+		secure = false // allow HTTP for local
+	} else {
+		domain = os.Getenv("COOKIE_DOMAIN") // e.g., ".rccgsalvationcentre.org"
+	}
+
+	// Use Gin's built-in SetCookie
 	c.SetCookie(
 		cookieName,    // name
 		sessionCookie, // value
 		14*24*60*60,   // maxAge: 14 days in seconds
 		"/",           // path
-		domain,        // domain (empty = current host only)
-		secure,        // secure (true only in production)
+		domain,        // domain (empty in dev)
+		secure,        // secure (false in dev)
 		true,          // httpOnly
 	)
 
@@ -109,8 +121,20 @@ func Logout(c *gin.Context) {
 		cookieName = "rccg_session"
 	}
 
-	domain := os.Getenv("COOKIE_DOMAIN")
+	// Detect local dev
+	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
+		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
+		strings.Contains(c.Request.Host, "localhost")
+
+	var domain string
 	secure := os.Getenv("ENVIRONMENT") == "production"
+
+	if isDev {
+		domain = ""
+		secure = false
+	} else {
+		domain = os.Getenv("COOKIE_DOMAIN")
+	}
 
 	// Properly clear the cookie using Gin's SetCookie with maxAge = -1
 	c.SetCookie(
