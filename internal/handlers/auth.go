@@ -1,4 +1,3 @@
-// internal/handlers/auth.go
 package handlers
 
 import (
@@ -18,8 +17,6 @@ type LoginRequest struct {
 	IDToken string `json:"idToken" binding:"required"`
 }
 
-// POST /api/auth/login
-// Receives Firebase ID token from frontend and creates secure session cookie
 func Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -27,46 +24,35 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Create secure session cookie from Firebase ID token (valid 14 days)
 	sessionCookie, err := auth.CreateSessionCookie(req.IDToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired Firebase token"})
 		return
 	}
 
-	// Get configuration from environment
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
-	if cookieName == "" {
-		cookieName = "rccg_session" // fallback default
-	}
-
-	// Detect if request is from local development (for testing local frontend against prod backend)
 	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
 		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
 		strings.Contains(c.Request.Host, "localhost")
 
-	var domain string
-	secure := os.Getenv("ENVIRONMENT") == "production"
-
-	if isDev {
-		domain = ""    // no domain for local cross-port
-		secure = false // allow HTTP for local
-	} else {
-		domain = os.Getenv("COOKIE_DOMAIN") // e.g., ".rccgsalvationcentre.org"
+	domain := os.Getenv("COOKIE_DOMAIN")
+	secure := !isDev
+	sameSite := http.SameSiteLaxMode
+	if !isDev {
+		sameSite = http.SameSiteNoneMode
 	}
 
-	// Use Gin's built-in SetCookie
-	c.SetCookie(
-		cookieName,    // name
-		sessionCookie, // value
-		14*24*60*60,   // maxAge: 14 days in seconds
-		"/",           // path
-		domain,        // domain (empty in dev)
-		secure,        // secure (false in dev)
-		true,          // httpOnly
-	)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     cookieName,
+		Value:    sessionCookie,
+		Path:     "/",
+		Domain:   domain,
+		MaxAge:   14 * 24 * 60 * 60,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: sameSite,
+	})
 
-	// Verify the ID token to extract email
 	token, err := auth.FirebaseAuth.VerifyIDToken(context.Background(), req.IDToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to verify Firebase token"})
@@ -79,14 +65,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Check if this email exists in our admins table
 	var admin models.Admin
 	if err := database.DB.Where("email = ?", email).First(&admin).Error; err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Admin account not found. Contact superadmin."})
 		return
 	}
 
-	// Success — return user info
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"user": gin.H{
@@ -96,8 +80,6 @@ func Login(c *gin.Context) {
 	})
 }
 
-// GET /api/auth/me
-// Returns current logged-in admin (protected by AuthRequired middleware)
 func Me(c *gin.Context) {
 	email := c.GetString("adminEmail")
 	role := c.GetString("adminRole")
@@ -113,39 +95,29 @@ func Me(c *gin.Context) {
 	})
 }
 
-// POST /api/auth/logout
-// Clears the session cookie
 func Logout(c *gin.Context) {
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
-	if cookieName == "" {
-		cookieName = "rccg_session"
-	}
-
-	// Detect local dev
 	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
 		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
 		strings.Contains(c.Request.Host, "localhost")
 
-	var domain string
-	secure := os.Getenv("ENVIRONMENT") == "production"
-
-	if isDev {
-		domain = ""
-		secure = false
-	} else {
-		domain = os.Getenv("COOKIE_DOMAIN")
+	domain := os.Getenv("COOKIE_DOMAIN")
+	secure := !isDev
+	sameSite := http.SameSiteLaxMode
+	if !isDev {
+		sameSite = http.SameSiteNoneMode
 	}
 
-	// Properly clear the cookie using Gin's SetCookie with maxAge = -1
-	c.SetCookie(
-		cookieName,
-		"",
-		-1, // delete cookie
-		"/",
-		domain,
-		secure,
-		true,
-	)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   domain,
+		MaxAge:   -1,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: sameSite,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

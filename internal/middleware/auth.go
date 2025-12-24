@@ -1,8 +1,8 @@
-// internal/middleware/auth.go
 package middleware
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"rccg-salvation-centre-backend/internal/auth"
@@ -12,10 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthRequired - verifies session cookie and loads admin into context
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sessionCookie, err := c.Cookie("rccg_session")
+		cookieName := os.Getenv("SESSION_COOKIE_NAME")
+
+		sessionCookie, err := c.Cookie(cookieName)
 		if err != nil || sessionCookie == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: No session found"})
 			c.Abort()
@@ -51,7 +52,6 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// RequireRoles - allows one or more roles
 func RequireRoles(allowed ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("adminRole")
@@ -73,12 +73,10 @@ func RequireRoles(allowed ...string) gin.HandlerFunc {
 	}
 }
 
-// Shortcut for superadmin only
 func RequireSuperAdmin() gin.HandlerFunc {
 	return RequireRoles("superadmin")
 }
 
-// Log admin actions (create, update, delete, etc.)
 func LogActivity(c *gin.Context, action string, details string) {
 	email, _ := c.Get("adminEmail")
 	adminID, _ := c.Get("adminID")
