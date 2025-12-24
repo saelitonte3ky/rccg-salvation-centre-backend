@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -31,15 +32,32 @@ func Login(c *gin.Context) {
 	}
 
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
+
+	// Detect if request is from localhost
 	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
 		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
 		strings.Contains(c.Request.Host, "localhost")
 
-	domain := os.Getenv("COOKIE_DOMAIN")
-	secure := !isDev
-	sameSite := http.SameSiteLaxMode
-	if !isDev {
-		sameSite = http.SameSiteNoneMode
+	// For cross-origin requests (frontend and backend on different domains),
+	// we MUST NOT set Domain, and MUST use Secure=true + SameSite=None
+	var domain string
+	var secure bool
+	var sameSite http.SameSite
+
+	if isDev {
+		domain = ""
+		secure = false
+		sameSite = http.SameSiteLaxMode
+	} else {
+		// Production: Cross-origin setup (Vercel frontend + Render backend)
+		// CRITICAL: Do NOT set domain for cross-origin cookies
+		domain = ""
+		secure = true                    // REQUIRED for SameSite=None
+		sameSite = http.SameSiteNoneMode // REQUIRED for cross-origin
+
+		// Log for debugging
+		log.Printf("Setting cookie for production: Origin=%s, Secure=%v, SameSite=%v",
+			c.Request.Header.Get("Origin"), secure, sameSite)
 	}
 
 	http.SetCookie(c.Writer, &http.Cookie{
@@ -47,7 +65,7 @@ func Login(c *gin.Context) {
 		Value:    sessionCookie,
 		Path:     "/",
 		Domain:   domain,
-		MaxAge:   14 * 24 * 60 * 60,
+		MaxAge:   14 * 24 * 60 * 60, // 14 days
 		Secure:   secure,
 		HttpOnly: true,
 		SameSite: sameSite,
@@ -97,14 +115,22 @@ func Me(c *gin.Context) {
 
 func Logout(c *gin.Context) {
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
+
 	isDev := strings.Contains(c.Request.Header.Get("Origin"), "localhost") ||
 		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
 		strings.Contains(c.Request.Host, "localhost")
 
-	domain := os.Getenv("COOKIE_DOMAIN")
-	secure := !isDev
-	sameSite := http.SameSiteLaxMode
-	if !isDev {
+	var domain string
+	var secure bool
+	var sameSite http.SameSite
+
+	if isDev {
+		domain = ""
+		secure = false
+		sameSite = http.SameSiteLaxMode
+	} else {
+		domain = "" // Empty for cross-origin
+		secure = true
 		sameSite = http.SameSiteNoneMode
 	}
 
