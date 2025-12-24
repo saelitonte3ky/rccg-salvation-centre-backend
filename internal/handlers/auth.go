@@ -83,16 +83,30 @@ func Login(c *gin.Context) {
 	var sameSite http.SameSite
 
 	if isDev {
+		// Pure local development
 		domain = ""
 		secure = false
-		sameSite = http.SameSiteNoneMode // ← CHANGED: Required for cross-origin localhost (Next.js on :3000 → Gin on :8080)
-		log.Printf("[LOGIN] Development mode: Secure=false, SameSite=None (allows cross-origin cookie in dev)")
+		sameSite = http.SameSiteNoneMode
+		log.Printf("[LOGIN] Development mode (localhost detected): Secure=false, SameSite=None")
 	} else {
-		// Production: Cross-origin setup
-		domain = ""
-		secure = true                    // REQUIRED for SameSite=None
-		sameSite = http.SameSiteNoneMode // REQUIRED for cross-origin
-		log.Printf("[LOGIN] Production mode: Origin=%s, Secure=true, SameSite=None", origin)
+		// Production environment (deployed on Render)
+		domain = ".rccgsalvationcentre.org" // Allows sharing across subdomains (api., www., etc.)
+		secure = true
+		sameSite = http.SameSiteNoneMode
+
+		// TEMPORARY DEV FIX: Allow insecure cookie if origin is localhost/ngrok (for local frontend testing)
+		lowerOrigin := strings.ToLower(origin)
+		if strings.Contains(lowerOrigin, "localhost") ||
+			strings.Contains(lowerOrigin, "127.0.0.1") ||
+			strings.Contains(lowerOrigin, "ngrok") ||
+			strings.Contains(lowerOrigin, "localtunnel") ||
+			strings.Contains(lowerOrigin, ".vercel.app") { // Vercel previews if needed
+			secure = false
+			log.Printf("[LOGIN] *** WARNING: Insecure cookie (Secure=false) allowed for local/tunnel development. Origin: %s ***", origin)
+			log.Printf("[LOGIN] *** REMOVE THIS OVERRIDE BEFORE FULL PRODUCTION LAUNCH ***")
+		}
+
+		log.Printf("[LOGIN] Production mode: Origin=%s, Secure=%v, SameSite=None, Domain=%s", origin, secure, domain)
 	}
 
 	// Set the cookie
@@ -107,8 +121,8 @@ func Login(c *gin.Context) {
 		SameSite: sameSite,
 	})
 
-	log.Printf("[LOGIN] ✓ Cookie set: Name=%s, Path=/, MaxAge=14days, Secure=%v, HttpOnly=true, SameSite=%v",
-		cookieName, secure, sameSite)
+	log.Printf("[LOGIN] ✓ Cookie set: Name=%s, Path=/, MaxAge=14days, Secure=%v, HttpOnly=true, SameSite=%v, Domain=%s",
+		cookieName, secure, sameSite, domain)
 
 	// Return success response
 	response := gin.H{
@@ -167,11 +181,22 @@ func Logout(c *gin.Context) {
 	if isDev {
 		domain = ""
 		secure = false
-		sameSite = http.SameSiteNoneMode // ← CHANGED: Match Login behavior
+		sameSite = http.SameSiteNoneMode
 	} else {
-		domain = ""
+		domain = ".rccgsalvationcentre.org"
 		secure = true
 		sameSite = http.SameSiteNoneMode
+
+		// TEMPORARY DEV FIX: Match Login behavior
+		lowerOrigin := strings.ToLower(origin)
+		if strings.Contains(lowerOrigin, "localhost") ||
+			strings.Contains(lowerOrigin, "127.0.0.1") ||
+			strings.Contains(lowerOrigin, "ngrok") ||
+			strings.Contains(lowerOrigin, "localtunnel") ||
+			strings.Contains(lowerOrigin, ".vercel.app") {
+			secure = false
+			log.Printf("[LOGOUT] *** WARNING: Insecure cookie clear (Secure=false) for local development. Origin: %s ***", origin)
+		}
 	}
 
 	// Clear the cookie by setting MaxAge to -1
@@ -186,7 +211,7 @@ func Logout(c *gin.Context) {
 		SameSite: sameSite,
 	})
 
-	log.Printf("[LOGOUT] ✓ Cookie cleared: %s", cookieName)
+	log.Printf("[LOGOUT] ✓ Cookie cleared: %s (Secure=%v, Domain=%s)", cookieName, secure, domain)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
