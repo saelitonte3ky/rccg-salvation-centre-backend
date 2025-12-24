@@ -15,6 +15,8 @@ func CORSMiddleware() gin.HandlerFunc {
 	allowedOrigins := map[string]bool{
 		"http://localhost:3000":                    true,
 		"http://127.0.0.1:3000":                    true,
+		"http://localhost:8080":                    true,
+		"http://127.0.0.1:8080":                    true,
 		"https://rccg-salvation-centre.vercel.app": true,
 		"https://www.rccgsalvationcentre.org":      true,
 	}
