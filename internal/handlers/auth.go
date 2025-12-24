@@ -85,11 +85,10 @@ func Login(c *gin.Context) {
 	if isDev {
 		domain = ""
 		secure = false
-		sameSite = http.SameSiteLaxMode
-		log.Printf("[LOGIN] Development mode: Secure=false, SameSite=Lax")
+		sameSite = http.SameSiteNoneMode // ← CHANGED: Required for cross-origin localhost (Next.js on :3000 → Gin on :8080)
+		log.Printf("[LOGIN] Development mode: Secure=false, SameSite=None (allows cross-origin cookie in dev)")
 	} else {
 		// Production: Cross-origin setup
-		// CRITICAL: Leave domain empty for cross-origin cookies
 		domain = ""
 		secure = true                    // REQUIRED for SameSite=None
 		sameSite = http.SameSiteNoneMode // REQUIRED for cross-origin
@@ -168,7 +167,7 @@ func Logout(c *gin.Context) {
 	if isDev {
 		domain = ""
 		secure = false
-		sameSite = http.SameSiteLaxMode
+		sameSite = http.SameSiteNoneMode // ← CHANGED: Match Login behavior
 	} else {
 		domain = ""
 		secure = true
