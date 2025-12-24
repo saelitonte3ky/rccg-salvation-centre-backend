@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -16,25 +15,13 @@ import (
 	"rccg-salvation-centre-backend/internal/database"
 	"rccg-salvation-centre-backend/internal/middleware"
 	"rccg-salvation-centre-backend/internal/routes"
-	"rccg-salvation-centre-backend/seed"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
-	env := os.Getenv("ENVIRONMENT")
-	if env != "production" {
-		if err := godotenv.Load(".env.local"); err != nil {
-			if err := godotenv.Load(); err != nil {
-				log.Println("No .env file found – using system environment variables")
-			}
-		}
-	}
-
-	if env == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	// Always run in production/release mode (backend is always deployed)
+	gin.SetMode(gin.ReleaseMode)
 
 	if err := validateEnv(); err != nil {
 		log.Fatal("Environment validation failed:", err)
@@ -47,23 +34,10 @@ func main() {
 		}
 	}()
 
-	// Check if seeding is enabled
-	enableSeeding := strings.ToLower(os.Getenv("ENABLE_SEEDING"))
-	if enableSeeding == "true" || enableSeeding == "1" || enableSeeding == "yes" {
-		log.Println("Starting database seeding...")
-		seed.SeedAdmins()
-		seed.SeedServiceTypes()
-		log.Println("Database seeding completed")
-	} else {
-		log.Println("Seeding skipped (ENABLE_SEEDING not set to true)")
-	}
-
 	auth.InitFirebase()
 
 	r := gin.Default()
-	//r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORSMiddleware())
-	//r.Use(middleware.RequestSizeLimiter(10 << 20))
 	r.Use(middleware.RateLimiter())
 
 	routes.SetupRoutes(r)
@@ -82,7 +56,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Server starting on http://localhost:%s", port)
+		log.Printf("Server starting on :%s", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"rccg-salvation-centre-backend/internal/auth"
 	"rccg-salvation-centre-backend/internal/database"
@@ -36,7 +35,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[LOGIN] ✓ Session cookie created successfully")
+	log.Printf("[LOGIN] Session cookie created successfully")
 
 	// Verify the ID token and extract claims
 	token, err := auth.FirebaseAuth.VerifyIDToken(context.Background(), req.IDToken)
@@ -63,52 +62,26 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[LOGIN] ✓ Admin found: Email=%s, Role=%s", admin.Email, admin.Role)
+	log.Printf("[LOGIN] Admin found: Email=%s, Role=%s", admin.Email, admin.Role)
 
-	// Set cookie
+	// Cookie name with fallback
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
 	if cookieName == "" {
-		cookieName = "session"
-		log.Printf("[LOGIN] Warning: SESSION_COOKIE_NAME not set, using default: %s", cookieName)
+		cookieName = "rccg_session"
 	}
 
-	// Detect environment
-	origin := c.Request.Header.Get("Origin")
-	isDev := strings.Contains(origin, "localhost") ||
-		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
-		strings.Contains(c.Request.Host, "localhost")
-
-	var domain string
-	var secure bool
-	var sameSite http.SameSite
-
-	if isDev {
-		domain = ""
-		secure = false
-		sameSite = http.SameSiteNoneMode // ← CHANGED: Required for cross-origin localhost (Next.js on :3000 → Gin on :8080)
-		log.Printf("[LOGIN] Development mode: Secure=false, SameSite=None (allows cross-origin cookie in dev)")
-	} else {
-		// Production: Cross-origin setup
-		domain = ""
-		secure = true                    // REQUIRED for SameSite=None
-		sameSite = http.SameSiteNoneMode // REQUIRED for cross-origin
-		log.Printf("[LOGIN] Production mode: Origin=%s, Secure=true, SameSite=None", origin)
-	}
-
-	// Set the cookie
+	// Always use production settings (backend is always on HTTPS)
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     cookieName,
 		Value:    sessionCookie,
 		Path:     "/",
-		Domain:   domain,
 		MaxAge:   14 * 24 * 60 * 60, // 14 days
-		Secure:   secure,
+		Secure:   true,              // Required for SameSite=None
 		HttpOnly: true,
-		SameSite: sameSite,
+		SameSite: http.SameSiteNoneMode, // Required for cross-origin (localhost → deployed backend)
 	})
 
-	log.Printf("[LOGIN] ✓ Cookie set: Name=%s, Path=/, MaxAge=14days, Secure=%v, HttpOnly=true, SameSite=%v",
-		cookieName, secure, sameSite)
+	log.Printf("[LOGIN] Cookie '%s' set: Secure=true, SameSite=None, MaxAge=14days", cookieName)
 
 	// Return success response
 	response := gin.H{
@@ -119,8 +92,7 @@ func Login(c *gin.Context) {
 		},
 	}
 
-	log.Printf("[LOGIN] ✓ Login successful! Returning: %+v", response)
-
+	log.Printf("[LOGIN] Login successful! Returning: %+v", response)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -128,11 +100,10 @@ func Me(c *gin.Context) {
 	email := c.GetString("adminEmail")
 	role := c.GetString("adminRole")
 
-	log.Printf("[ME] Request from: %s, adminEmail=%s, adminRole=%s",
-		c.Request.Header.Get("Origin"), email, role)
+	log.Printf("[ME] Request from origin: %s, adminEmail=%s", c.Request.Header.Get("Origin"), email)
 
 	if email == "" || role == "" {
-		log.Printf("[ME] Not authenticated: email=%s, role=%s", email, role)
+		log.Printf("[ME] Not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
 		return
 	}
@@ -142,51 +113,30 @@ func Me(c *gin.Context) {
 		"role":  role,
 	}
 
-	log.Printf("[ME] ✓ Authenticated user: %+v", response)
-
+	log.Printf("[ME] Authenticated user: %+v", response)
 	c.JSON(http.StatusOK, response)
 }
 
 func Logout(c *gin.Context) {
-	log.Printf("[LOGOUT] Logout request from: %s", c.Request.Header.Get("Origin"))
+	log.Printf("[LOGOUT] Logout request from origin: %s", c.Request.Header.Get("Origin"))
 
 	cookieName := os.Getenv("SESSION_COOKIE_NAME")
 	if cookieName == "" {
-		cookieName = "session"
+		cookieName = "rccg_session"
 	}
 
-	origin := c.Request.Header.Get("Origin")
-	isDev := strings.Contains(origin, "localhost") ||
-		strings.Contains(c.Request.Header.Get("Referer"), "localhost") ||
-		strings.Contains(c.Request.Host, "localhost")
-
-	var domain string
-	var secure bool
-	var sameSite http.SameSite
-
-	if isDev {
-		domain = ""
-		secure = false
-		sameSite = http.SameSiteNoneMode // ← CHANGED: Match Login behavior
-	} else {
-		domain = ""
-		secure = true
-		sameSite = http.SameSiteNoneMode
-	}
-
-	// Clear the cookie by setting MaxAge to -1
+	// Always use production settings to clear the cookie
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
-		Domain:   domain,
 		MaxAge:   -1,
-		Secure:   secure,
+		Secure:   true,
 		HttpOnly: true,
-		SameSite: sameSite,
+		SameSite: http.SameSiteNoneMode,
 	})
 
-	log.Printf("[LOGOUT] ✓ Cookie cleared: %s", cookieName)
+	log.Printf("[LOGOUT] Cookie '%s' cleared (MaxAge=-1)", cookieName)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
