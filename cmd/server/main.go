@@ -1,4 +1,3 @@
-// cmd/server/main.go
 package main
 
 import (
@@ -40,6 +39,11 @@ func main() {
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.RateLimiter())
 
+	// 1. Lightweight health check endpoint
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "alive"})
+	})
+
 	routes.SetupRoutes(r)
 
 	port := os.Getenv("PORT")
@@ -62,9 +66,16 @@ func main() {
 		}
 	}()
 
+	// 2. Start the background routine targeting your live domain
+	ctxKeepAlive, cancelKeepAlive := context.WithCancel(context.Background())
+	go startKeepAliveTicker(ctxKeepAlive)
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
+	// 3. Stop the keep-alive routine smoothly on server termination
+	cancelKeepAlive()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -96,4 +107,39 @@ func validateEnv() error {
 	}
 
 	return nil
+}
+
+// 4. Background task to ping the live API every 5 minutes
+func startKeepAliveTicker(ctx context.Context) {
+	// Give the server 10 seconds to fully deploy and start up before firing the first request
+	time.Sleep(10 * time.Second)
+
+	url := "https://api.rccgsalvationcentre.org/health"
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	// Initial ping
+	pingServer(url)
+
+	for {
+		select {
+		case <-ticker.C:
+			pingServer(url)
+		case <-ctx.Done():
+			log.Println("Stopping keep-alive ticker...")
+			return
+		}
+	}
+}
+
+func pingServer(url string) {
+	client := http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Keep-alive ping to %s failed: %v", url)
+		return
+	}
+	resp.Body.Close()
 }

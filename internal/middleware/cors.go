@@ -24,7 +24,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, Accept, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Type")
-		c.Writer.Header().Set("Access-Control-Max-Age", "86400") // Cache preflight for 24 hours
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 
 		// Handle preflight OPTIONS requests
 		if c.Request.Method == "OPTIONS" {
